@@ -46,6 +46,10 @@ def is_engine_load(file_path):
     return "engine_load" in str(file_path)
 
 
+def is_engine_fuel_consumption(file_path):
+    return "fuel_consumption" in str(file_path)
+
+
 def transform_time():
     pass
 
@@ -78,8 +82,20 @@ def generate_engine_load_plots():
     plot(all_times, total_sum, "Total Engine Load", "Total Load", False)
 
 
+def generate_fuel_consumption_plot():
+    file_paths = Path("gunnerus").glob("**/*.csv")
+    filtered_file_paths = [file_path for file_path in file_paths if is_engine(
+        file_path) and is_engine_fuel_consumption(file_path)]
+    for file_path in filtered_file_paths:
+        label = extract_label(file_path)
+        time, data, unit = extract_data(file_path)
+        plot(time, data, "Individual Engine fuel consumption", label, False)
+
+
 def main():
     generate_engine_load_plots()
+    generate_fuel_consumption_plot()
+
 
 
 if __name__ == "__main__":
