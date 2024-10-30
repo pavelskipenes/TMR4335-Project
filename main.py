@@ -63,10 +63,12 @@ plots
 """
 
 
-def plot(x: list, y: list, title: str, label: str, clear: bool = True, save: bool = True):
+def plot(x: list, y: list, unit_y: str, title: str, label: str, clear: bool, save: bool):
     plt.plot(x, y, label=label)
     plt.xticks(rotation=45)
     plt.title(title)
+    plt.ylabel(unit_y)
+    plt.xlabel("time")
     plt.legend()
     plt.tight_layout()
     plt.plot()
@@ -77,11 +79,11 @@ def plot(x: list, y: list, title: str, label: str, clear: bool = True, save: boo
 
 
 def plot_inidividual_and_sum(filtered_file_paths, plot_title):
-    time_series, unit = extract_time_series(filtered_file_paths)
+    time_series, unit_y = extract_time_series(filtered_file_paths)
     labels = time_series.keys()
     for label in labels:
         (time, data) = time_series[label]
-        plot(time, data, "", label, False, False)
+        plot(time, data, "", "", label, False, False)
     all_times = sorted(set(t for time, _ in time_series.values() for t in time))
     all_timestamps = np.array([t.timestamp() for t in all_times])
     total_sum = np.zeros(len(all_timestamps))
@@ -89,15 +91,15 @@ def plot_inidividual_and_sum(filtered_file_paths, plot_title):
         time_timestamps = np.array([t.timestamp() for t in time])
         interpolated_data = np.interp(all_timestamps, time_timestamps, data)
         total_sum += interpolated_data
-    plot(all_times, total_sum, plot_title, "Total " + plot_title.lower(), True, True)
+    plot(all_times, total_sum, unit_y, plot_title, "Total " + plot_title.lower(), True, True)
 
 
 def plot_individual(filtered_file_paths, plot_title):
-    time_series, unit = extract_time_series(filtered_file_paths)
+    time_series, unit_y = extract_time_series(filtered_file_paths)
     labels = time_series.keys()
     for label in labels:
         (time, data) = time_series[label]
-        plot(time, data, plot_title, label, False, False)
+        plot(time, data, unit_y, plot_title, label, False, False)
     plt.savefig("plots/" + plot_title + ".svg")
     plt.clf()
 
