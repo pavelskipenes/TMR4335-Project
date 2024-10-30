@@ -7,12 +7,12 @@ import numpy as np
 def plot(x: list, y: list, title: str, label: str, clear: bool = True, save: bool = True):
     plt.plot(x, y, label=label)
     plt.xticks(rotation=45)
-    plt.tight_layout()
     plt.title(title)
     plt.legend()
+    plt.tight_layout()
     plt.plot()
     if save:
-        plt.savefig("plots/" + label.replace(".csv", ".svg"))
+        plt.savefig("plots/" + title.replace(".csv", ".svg"))
     if clear:
         plt.clf()
 
@@ -44,6 +44,30 @@ def is_engine_load(file_path):
     return "engine_load" in str(file_path)
 
 
+def is_engine_speed(file_path):
+    return "engine_speed" in str(file_path)
+
+
+def is_load_feedback(file_path):
+    return "LoadFeedback" in str(file_path)
+
+
+def is_exhaust_temperature1(file_path):
+    return "exhaust_temperature1" in str(file_path)
+
+
+def is_exhaust_temperature2(file_path):
+    return "exhaust_temperature2" in str(file_path)
+
+
+def is_coolant_temperature(file_path):
+    return "coolant_temperature" in str(file_path)
+
+
+def is_boost_pressure(file_path):
+    return "boost_pressure" in str(file_path)
+
+
 def is_engine_fuel_consumption(file_path):
     return "fuel_consumption" in str(file_path)
 
@@ -66,7 +90,7 @@ def extract_time_series(filtered_file_paths):
     return all_data, unit
 
 
-def complete_plot(filtered_file_paths, plot_title):
+def plot_inidividual_and_combined(filtered_file_paths, plot_title):
     time_series, unit = extract_time_series(filtered_file_paths)
     labels = time_series.keys()
     for label in labels:
@@ -82,16 +106,51 @@ def complete_plot(filtered_file_paths, plot_title):
     plot(all_times, total_sum, plot_title, "Total " + plot_title.lower(), True, True)
 
 
+def plot_individual(filtered_file_paths, plot_title):
+    time_series, unit = extract_time_series(filtered_file_paths)
+    labels = time_series.keys()
+    for label in labels:
+        (time, data) = time_series[label]
+        plot(time, data, plot_title, label, False, False)
+    plt.savefig("plots/" + plot_title.replace(".csv", ".svg"))
+    plt.clf()
+
+
 def main():
     plt.figure(figsize=(24, 12))
     file_paths = Path("gunnerus").glob("**/*.csv")
     filtered_file_paths = [file_path for file_path in file_paths if is_engine(file_path) and is_engine_load(file_path)]
-    complete_plot(filtered_file_paths, "Engine load")
+    plot_inidividual_and_combined(filtered_file_paths, "Engine load")
+
     file_paths = Path("gunnerus").glob("**/*.csv")
     filtered_file_paths = [file_path for file_path in file_paths if is_engine(
         file_path) and is_engine_fuel_consumption(file_path)]
-    complete_plot(filtered_file_paths, "Fuel consumption")
+    plot_inidividual_and_combined(filtered_file_paths, "Fuel consumption")
 
+    file_paths = Path("gunnerus").glob("**/*.csv")
+    filtered_file_paths = [file_path for file_path in file_paths if is_thruster(
+        file_path) and is_load_feedback(file_path)]
+    plot_individual(filtered_file_paths, "Load feedback")
+
+    file_paths = Path("gunnerus").glob("**/*.csv")
+    filtered_file_paths = [file_path for file_path in file_paths if is_engine(
+        file_path) and is_engine_speed(file_path)]
+    plot_individual(filtered_file_paths, "Engine speed")
+
+    file_paths = Path("gunnerus").glob("**/*.csv")
+    filtered_file_paths = [file_path for file_path in file_paths if is_engine(
+        file_path) and is_boost_pressure(file_path)]
+    plot_individual(filtered_file_paths, "Engine boost pressure")
+
+    file_paths = Path("gunnerus").glob("**/*.csv")
+    filtered_file_paths = [file_path for file_path in file_paths if is_engine(
+        file_path) and is_coolant_temperature(file_path)]
+    plot_individual(filtered_file_paths, "Engine coolant temperature")
+
+    file_paths = Path("gunnerus").glob("**/*.csv")
+    filtered_file_paths = [file_path for file_path in file_paths if is_engine(
+        file_path) and is_exhaust_temperature1(file_path)]
+    plot_individual(filtered_file_paths, "Engine coolant temperature")
 
 if __name__ == "__main__":
     main()
