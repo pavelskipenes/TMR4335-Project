@@ -2,3 +2,4 @@ venv/
 plots/
 bearer.txt
 .env
+__pycache__/
