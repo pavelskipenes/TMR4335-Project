@@ -85,13 +85,12 @@ def engine_thermal_efficiency(title, file_paths, route):
     for ts_load, ts_fuel in zip(time_series_engine_load, time_series_fuel_consumption):
         new_values = []
         for value_load, value_fuel in zip(ts_load.values, ts_fuel.values):
-            new_values.append(value_load / value_fuel * 3600/(820 * 45.4) * 100)
+            new_values.append(value_load / value_fuel * 3600 / (820 * 45.4) * 100)
         ts_load.values = new_values
         ts_load.label = "Engine thermal efficiency " + ts_load.label[7]
         ts_load.unit = "%"
 
     time_series_thermal_efficiency = time_series_engine_load
-
 
     unit = time_series_thermal_efficiency[0].unit
 
@@ -307,7 +306,7 @@ def main():
             )
 
         sum_plot_args = [
-            ("Thruster load watt", f.is_thruster_rpm, "W", transform.thruster_load),
+            ("Thruster load watt", f.is_thruster_load, "W", transform.thruster_load),
 
             ("Engine fuel consumption", f.is_engine_fuel_consumption, None, None),
             ("Engine fuel consumption kg_m³", f.is_engine_fuel_consumption,
