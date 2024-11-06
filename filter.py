@@ -11,16 +11,20 @@ def is_thruster(file_path: str) -> bool:
     return "hcx" in str(file_path)
 
 
+def is_thruster_load(file_path):
+    return "LoadFeedback" in str(file_path) and is_thruster(file_path)
+
+
+def is_thruster_rpm(file_path):
+    return "RPMFeedback" in str(file_path) and is_thruster(file_path)
+
+
 def is_engine_load(file_path):
     return "engine_load" in str(file_path) and is_engine(file_path)
 
 
 def is_engine_speed(file_path):
     return "engine_speed" in str(file_path) and is_engine(file_path)
-
-
-def is_thruster_load(file_path):
-    return "LoadFeedback" in str(file_path) and is_thruster(file_path)
 
 
 def is_engine_exhaust_temperature1(file_path):
@@ -45,10 +49,6 @@ def is_engine_boost_pressure(file_path):
 
 def is_engine_fuel_consumption(file_path):
     return "fuel_consumption" in str(file_path) and is_engine(file_path)
-
-
-def is_thruster_rpm(file_path):
-    return "RPMFeedback" in str(file_path) and is_thruster(file_path)
 
 
 def is_vessel_speed_over_ground(file_path):

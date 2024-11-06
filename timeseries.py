@@ -58,21 +58,28 @@ class TimeSeries:
         self.interpolate(other)
         return TimeSeries(self.time_stamps, self.values - other.values, self.label, self.unit)
 
-    def __mul__(self, other: Self) -> Self:
+    def __mul__(self, other: Self | int) -> Self:
         if self.label is None:
             raise ValueError("current instance is missing a label")
-        if self.unit != other.unit:
-            raise ValueError(f"Cannot multiply TimeSeries with different units: {self.unit} and {other.unit}")
-        self.interpolate(other)
-        return TimeSeries(self.time_stamps, self.values * other.values, self.label, self.unit)
+        # if self.unit != other.unit:
+        #     raise ValueError(f"Cannot multiply TimeSeries with different units: {self.unit} and {other.unit}")
+        if other is Self:
+            self.interpolate(other)
+            return TimeSeries(self.time_stamps, self.values * other.values, self.label, self.unit)
+        values = [value for value in self.values]
+        return TimeSeries(self.label, values, self.label, "")
 
-    def __truediv__(self, other: Self) -> Self:
-        if self.label is None:
-            raise ValueError("current instance is missing a label")
-        if self.unit != other.unit:
-            raise ValueError(f"Cannot divide TimeSeries with different units: {self.unit} and {other.unit}")
-        self.interpolate(other)
-        return TimeSeries(self.time_stamps, self.values / other.values, self.label, self.unit)
+
+#    def __truediv__(self, other: Self) -> Self:
+#        if self.label is None:
+#            raise ValueError("current instance is missing a label")
+#        for index, value in enumerate(other.values):
+#            if value == 0:
+#                other.time_stamps = np.delete(other.time_stamps, index)
+#                other.values = np.delete(other.values, index)
+#
+#        self.interpolate(other)
+#        return TimeSeries(self.time_stamps, self.values / other.values, self.label, "")
 
     def __repr__(self) -> str:
         if self.label is None:
@@ -89,8 +96,13 @@ class TimeSeries:
     def __iter__(self):
         return zip(self.time_stamps, self.values)
 
-    def transform(self, transformer, new_unit: str) -> Self:
-        transformed_values = [transformer(value) for value in self.values]
+    def transform(self, transformer, new_unit: str, other: Self = None) -> Self:
+        transformed_values = []
+        if other is None:
+            transformed_values = [transformer(value) for value in self.values]
+        else:
+            self.interpolate(other)
+            transformed_values = [transformer(value, other) for value in self.values]
         return TimeSeries(self.time_stamps, transformed_values, self.label, new_unit)
 
     def plot(self, axes: plt.Axes, label: str = None) -> None:

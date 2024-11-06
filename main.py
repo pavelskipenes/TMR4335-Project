@@ -1,9 +1,12 @@
 from pathlib import Path
-from datetime import datetime, timezone
 import matplotlib.pyplot as plt
 import filter as f
 from timeseries import TimeSeries
 import transform
+import os
+import routes
+
+extension = ".png"
 
 
 def get_engine_label(index: int, source: str) -> str:
@@ -54,12 +57,78 @@ def construct_label(file_path: str) -> str:
             raise NotImplementedError(f"{top_level}")
 
 
-def read_and_plot(title, file_paths, filter, date_time_start, date_time_end, sum_plots=False, new_unit: str = None, transformer=None):
+def engine_thermal_efficiency(title, file_paths, route):
+    file_paths_engine_load = [file_path for file_path in file_paths if f.is_engine_load(file_path)]
+    file_paths_engine_fuel_consumption = [
+        file_path for file_path in file_paths if f.is_engine_fuel_consumption(file_path)]
+
+    # this is in KW
+    time_series_engine_load = [TimeSeries.from_csv(file_path, label=construct_label(file_path))
+                               for file_path in file_paths_engine_load]
+    # this is in liters per hour
+    time_series_fuel_consumption = [TimeSeries.from_csv(file_path, label=construct_label(file_path))
+                                    for file_path in file_paths_engine_fuel_consumption]
+
+    date_time_start = route[1]
+    date_time_end = route[2]
+
+    if date_time_start is not None and date_time_end is not None:
+        time_series_engine_load = [ts.filter_date(date_time_start, date_time_end) for ts in time_series_engine_load]
+        time_series_fuel_consumption = [ts.filter_date(date_time_start, date_time_end)
+                                        for ts in time_series_fuel_consumption]
+
+    # interpolate
+    for ts_load, ts_engine in zip(time_series_engine_load, time_series_fuel_consumption):
+        ts_load.interpolate(ts_engine)
+        ts_engine.interpolate(ts_load)
+
+    for ts_load, ts_fuel in zip(time_series_engine_load, time_series_fuel_consumption):
+        new_values = []
+        for value_load, value_fuel in zip(ts_load.values, ts_fuel.values):
+            new_values.append(value_load / value_fuel * 3600/(820 * 45.4) * 100)
+        ts_load.values = new_values
+        ts_load.label = "Engine thermal efficiency " + ts_load.label[7]
+        ts_load.unit = "%"
+
+    time_series_thermal_efficiency = time_series_engine_load
+
+
+    unit = time_series_thermal_efficiency[0].unit
+
+    figure, ax = plt.subplots(figsize=(12, 6), dpi=300)
+
+    if unit != "%":
+        ax.ticklabel_format(axis='y', style='sci', scilimits=(1, 0))
+
+    ax.tick_params(axis='x', rotation=45)
+    ax.locator_params(axis='y', nbins=20)
+    ax.set_ylabel(unit)
+    ax.set_xlabel("Time")
+    ax.set_title(title + " " + route[0])
+    ax.grid(True)
+
+    for ts in time_series_thermal_efficiency:
+        ts.plot(ax)
+
+    ax.legend()
+    figure.tight_layout()
+    try:
+        os.mkdir(f"plots/{route[0]}/")
+    except FileExistsError:
+        pass
+    figure.savefig(f"plots/{route[0]}/{title}{extension}")
+    figure.clf()
+    plt.close()
+
+
+def read_and_plot(title, file_paths, filter, route, sum_plots=False, new_unit: str = None, transformer=None):
     filtered_file_paths = [file_path for file_path in file_paths if filter(file_path)]
 
     time_series = [TimeSeries.from_csv(file_path, label=construct_label(file_path))
                    for file_path in filtered_file_paths]
 
+    date_time_start = route[1]
+    date_time_end = route[2]
     if date_time_start is not None and date_time_end is not None:
         time_series = [ts.filter_date(date_time_start, date_time_end) for ts in time_series]
 
@@ -68,16 +137,16 @@ def read_and_plot(title, file_paths, filter, date_time_start, date_time_end, sum
 
     unit = time_series[0].unit
 
-    figure, ax = plt.subplots(figsize=(30, 18))
+    figure, ax = plt.subplots(figsize=(12, 6), dpi=300)
 
     if unit != "%":
         ax.ticklabel_format(axis='y', style='sci', scilimits=(1, 0))
 
     ax.tick_params(axis='x', rotation=45)
-    ax.locator_params(axis='y', nbins=40)
+    ax.locator_params(axis='y', nbins=20)
     ax.set_ylabel(unit)
     ax.set_xlabel("Time")
-    ax.set_title(title)
+    ax.set_title(title + " " + route[0])
     ax.grid(True)
 
     for ts in time_series:
@@ -90,88 +159,186 @@ def read_and_plot(title, file_paths, filter, date_time_start, date_time_end, sum
 
     ax.legend()
     figure.tight_layout()
-    figure.savefig(f"plots/{title}.svg")
+    try:
+        os.mkdir(f"plots/{route[0]}/")
+    except FileExistsError:
+        pass
+    figure.savefig(f"plots/{route[0]}/{title}{extension}")
     figure.clf()
+    plt.close()
+
+
+def efficiency_engine_to_thruster(title, route, file_paths):
+    figure, ax = plt.subplots(figsize=(12, 6), dpi=300)
+    ax.ticklabel_format(axis='y', style='sci', scilimits=(1, 0))
+
+    time_series_engine_load_ind = [TimeSeries.from_csv(file_path, construct_label(
+        file_path))for file_path in file_paths if f.is_engine_load(file_path)]
+    time_series_thruster_load_ind = [TimeSeries.from_csv(file_path, construct_label(
+        file_path)) for file_path in file_paths if f.is_thruster_load(file_path)]
+
+    time_series_engine_load_ind = [ts.transform(transform.engine_load, "W") for ts in time_series_engine_load_ind]
+    time_series_thruster_load_ind = [ts.transform(transform.thruster_load, "W") for ts in time_series_thruster_load_ind]
+
+    time_series_engine_load_total = sum(time_series_engine_load_ind)
+    time_series_thruster_load_total = sum(time_series_thruster_load_ind)
+    time_series_load_efficiency = time_series_thruster_load_total / time_series_engine_load_total
+    energy_density_diesel = 45.4e6
+    time_series_load_efficiency = time_series_load_efficiency * 1 / (energy_density_diesel)
+
+    date_time_start = route[1]
+    date_time_end = route[2]
+    if date_time_start is not None and date_time_end is not None:
+        time_series_load_efficiency = time_series_load_efficiency.filter_date(date_time_start, date_time_end)
+
+    unit = time_series_load_efficiency.unit
+
+    ax.tick_params(axis='x', rotation=45)
+    ax.locator_params(axis='y', nbins=20)
+    ax.locator_params(axis='x', nbins=40)
+    ax.set_ylabel(unit)
+    ax.set_xlabel("Time")
+    ax.set_title(title + " " + route[0])
+    ax.grid(True)
+
+    # for ts in time_series_engine_load_ind:
+    #     ts.plot(ax, ts.label)
+    #
+    # for ts in time_series_thruster_load_ind:
+    #     ts.plot(ax, ts.label)
+
+    time_series_load_efficiency.plot(ax, f"{title.lower()} total")
+
+    ax.legend()
+    figure.tight_layout()
+    try:
+        os.mkdir(f"plots/{route[0]}/")
+    except FileExistsError:
+        pass
+    figure.savefig(f"plots/{route[0]}/{title}{extension}")
+    figure.clf()
+    plt.close()
+
+
+def engine_load_minus_thruster_load(title, route, file_paths):
+    figure, ax = plt.subplots(figsize=(12, 6), dpi=300)
+    ax.ticklabel_format(axis='y', style='sci', scilimits=(1, 0))
+
+    time_series_engine_load_ind = [TimeSeries.from_csv(file_path, construct_label(
+        file_path))for file_path in file_paths if f.is_engine_load(file_path)]
+    time_series_thruster_load_ind = [TimeSeries.from_csv(file_path, construct_label(
+        file_path)) for file_path in file_paths if f.is_thruster_load(file_path)]
+
+    time_series_engine_load_ind = [ts.transform(transform.engine_load, "W") for ts in time_series_engine_load_ind]
+    time_series_thruster_load_ind = [ts.transform(transform.thruster_load, "W") for ts in time_series_thruster_load_ind]
+
+    time_series_engine_load_total = sum(time_series_engine_load_ind)
+    time_series_thruster_load_total = sum(time_series_thruster_load_ind)
+    time_series_load_difference = time_series_engine_load_total - time_series_thruster_load_total
+
+    date_time_start = route[1]
+    date_time_end = route[2]
+    if date_time_start is not None and date_time_end is not None:
+        time_series_load_difference = time_series_load_difference.filter_date(date_time_start, date_time_end)
+        time_series_engine_load_total = time_series_engine_load_total.filter_date(date_time_start, date_time_end)
+        time_series_thruster_load_total = time_series_thruster_load_total.filter_date(date_time_start, date_time_end)
+
+    unit = time_series_load_difference.unit
+
+    ax.tick_params(axis='x', rotation=45)
+    ax.locator_params(axis='y', nbins=20)
+    ax.locator_params(axis='x', nbins=40)
+    ax.set_ylabel(unit)
+    ax.set_xlabel("Time")
+    ax.set_title(title + " " + route[0])
+    ax.grid(True)
+
+    # for ts in time_series_engine_load_ind:
+    #     ts.plot(ax, ts.label)
+    #
+    # for ts in time_series_thruster_load_ind:
+    #     ts.plot(ax, ts.label)
+
+    time_series_load_difference.plot(ax, f"{title.lower()} total")
+    time_series_engine_load_total.plot(ax, "total engine load")
+    time_series_thruster_load_total.plot(ax, "total thruster load")
+
+    ax.legend()
+    figure.tight_layout()
+    try:
+        os.mkdir(f"plots/{route[0]}/")
+    except FileExistsError:
+        pass
+    figure.savefig(f"plots/{route[0]}/{title}{extension}")
+    figure.clf()
+    plt.close()
 
 
 def main():
     file_paths = list(Path("data/gunnerus/").glob("**/*.csv"))
 
-    # TODO: find date time range (route) for:
-    # thruster rpm control
-    # thruster load control
-    # idle / no speed
     # TODO: subtract engine load and thurster load to get idealized hotel load assumed to be constant
     # TODO: plot shit separated by routes
     # TODO: plot map data using the same routes
 
-    date_time_start = datetime(2024, 9, 10, 6, 30, tzinfo=timezone.utc)
-    routes = [
-        ("thruster load control", datetime(2024, 9, 10, 6, 40, tzinfo=timezone.utc),
-         datetime(2024, 9, 10, 6, 57, tzinfo=timezone.utc)),
-        ("thruster rpm control", datetime(2024, 9, 10, 6, 57, tzinfo=timezone.utc),
-         datetime(2024, 9, 10, 7, 5, 45, tzinfo=timezone.utc)),
-    ]
+    for route in routes.routes:
+        single_plot_args = [
+            ("Thruster load rpm", f.is_thruster_rpm),
+            ("Thruster load percent", f.is_thruster_load),
 
-    date_time_end = datetime(2024, 9, 10, 7, 44, tzinfo=timezone.utc)
+            ("Engine speed", f.is_engine_speed),
+            ("Engine boost pressure", f.is_engine_boost_pressure),
+            ("Engine coolant temperature", f.is_engine_coolant_temperature),
+            ("Engine exhaust temperature 1", f.is_engine_exhaust_temperature1),
+            ("Engine exhaust temperature 2", f.is_engine_exhaust_temperature2),
+            ("Engine fuel consumption", f.is_engine_fuel_consumption),
+            # ("", ),
+        ]
 
-    single_plot_args = [
-        ("Thruster load rpm", f.is_thruster_rpm),
-        ("Thruster load percent", f.is_thruster_load),
+        for title, filter in single_plot_args:
+            read_and_plot(
+                title=title,
+                file_paths=file_paths,
+                filter=filter,
+                route=route,
+                sum_plots=False,
+                new_unit=None,
+                transformer=None,
+            )
 
-        ("Engine speed", f.is_engine_speed),
-        ("Engine boost pressure", f.is_engine_boost_pressure),
-        ("Engine coolant temperature", f.is_engine_coolant_temperature),
-        ("Engine exhaust temperature 1", f.is_engine_exhaust_temperature1),
-        ("Engine exhaust temperature 2", f.is_engine_exhaust_temperature2),
-        ("Engine fuel consumption", f.is_engine_fuel_consumption),
-        # ("", ),
-    ]
+        sum_plot_args = [
+            ("Thruster load watt", f.is_thruster_rpm, "W", transform.thruster_load),
 
-    sum_plot_args = [
-        ("Thruster load watt", f.is_thruster_rpm, "W", transform.thruster_load),
+            ("Engine fuel consumption", f.is_engine_fuel_consumption, None, None),
+            ("Engine fuel consumption kg_m³", f.is_engine_fuel_consumption,
+             "kg/m³", transform.engine_fuel_consumption_liter_per_h_to_kg_per_h),
+            ("Engine load", f.is_engine_load, None, None),
+            ("Engine load watt", f.is_engine_load, "W", transform.engine_load),
+            # ("", ),
+        ]
+        for title, filter, new_unit, transformer in sum_plot_args:
+            read_and_plot(
+                title=title,
+                file_paths=file_paths,
+                filter=filter,
+                route=route,
+                sum_plots=True,
+                new_unit=new_unit,
+                transformer=transformer,
+            )
 
-        ("Engine fuel consumption", f.is_engine_fuel_consumption, None, None),
-        ("Engine load", f.is_engine_load, None, None),
-        ("Engine load watt", f.is_engine_load, "W", transform.engine_load),
-        # ("", ),
-    ]
-
-    for title, filter in single_plot_args:
-        read_and_plot(
-            title=title,
-            file_paths=file_paths,
-            filter=filter,
-            date_time_start=date_time_start,
-            date_time_end=date_time_end,
-            sum_plots=False,
-            new_unit=None,
-            transformer=None,
-        )
-
-    for title, filter, new_unit, transformer in sum_plot_args:
-        read_and_plot(
-            title=title,
-            file_paths=file_paths,
-            filter=filter,
-            date_time_start=date_time_start,
-            date_time_end=date_time_end,
-            sum_plots=True,
-            new_unit=new_unit,
-            transformer=transformer,
-        )
         read_and_plot(
             title="Speed over ground (SOG)",
             file_paths=file_paths,
             filter=f.is_vessel_speed_over_ground,
-            date_time_start=date_time_start,
-            date_time_end=date_time_end,
+            route=route,
             sum_plots=False,
             new_unit="m/s",
             transformer=transform.km_h_to_m_s,
         )
-
-        return
+        engine_load_minus_thruster_load("difference engine and thruster load", route, file_paths)
+        # efficiency_engine_to_thruster("power efficiency from engine to thruster", route, file_paths)
+        engine_thermal_efficiency("Engine thermal efficiency", file_paths, route)
 
 
 if __name__ == "__main__":
