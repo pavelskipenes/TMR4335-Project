@@ -24,12 +24,32 @@ def engine_load(engine_load_kw):
     return engine_load_kw * 1e3
 
 
+def engine_power_to_total_load(engine_load_kw):
+    number_of_engines = 2
+    max_power_engine = 450e3
+    return engine_load_kw / (number_of_engines * max_power_engine) * 100
+
+
+def from_percent_to_fraction(value):
+    return value / 100
+
+
 def km_h_to_m_s(vessel_sog):
     return vessel_sog * 60 / 1000
 
 
-def engine_efficiency(engine_power_percent):
+# input: 0-100 
+# output: 0-100
+def engine_efficiency_emperical(engine_power_percent):
     return -0.0024 * engine_power_percent**2 + 0.402 * engine_power_percent + 27.4382
+
+
+def engine_power_efficiency_emperical_to_thruster(engine_efficiency):
+    synchronous_generator_efficency = 0.96
+    frequency_converter_efficiency = 0.97
+    switchboard_efficiency = 0.99
+    propulsion_motor_efficiency = 0.97
+    return engine_efficiency * synchronous_generator_efficency * frequency_converter_efficiency * switchboard_efficiency * propulsion_motor_efficiency
 
 
 def engine_fuel_consumption_liter_per_h_to_kg_per_h(fuel_flow):
@@ -51,4 +71,3 @@ def bmep(power_diesel_engine):
     revolutions_per_stroke = 1
 
     return (power_diesel_engine * revolutions_per_stroke) / (displaced_volume * number_of_cylinders)
-

@@ -1,4 +1,5 @@
 from pathlib import Path
+from itertools import accumulate
 import matplotlib.pyplot as plt
 import filter as f
 from timeseries import TimeSeries
@@ -7,6 +8,17 @@ import os
 import routes
 
 extension = ".png"
+
+
+def filter_if(array, filter_func):
+    return [element for element in array if filter_func(element)]
+
+
+def filter_date_time(time_series, route):
+    date_time_start = route[1]
+    date_time_end = route[2]
+    if date_time_start is not None and date_time_end is not None:
+        return [ts.filter_date(date_time_start, date_time_end) for ts in time_series]
 
 
 def get_engine_label(index: int, source: str) -> str:
@@ -57,7 +69,7 @@ def construct_label(file_path: str) -> str:
             raise NotImplementedError(f"{top_level}")
 
 
-def engine_thermal_efficiency(title, file_paths, route):
+def total_power_engines(title, route, file_paths):
     file_paths_engine_load = [file_path for file_path in file_paths if f.is_engine_load(file_path)]
     file_paths_engine_fuel_consumption = [
         file_path for file_path in file_paths if f.is_engine_fuel_consumption(file_path)]
@@ -120,6 +132,149 @@ def engine_thermal_efficiency(title, file_paths, route):
     plt.close()
 
 
+def theoretical_fuel_consumption(title, route, file_paths):
+    figure, ax = plt.subplots(figsize=(12, 6), dpi=300)
+
+    file_paths_thruster_load = filter_if(file_paths, f.is_thruster_load)
+
+    ts_thrusters_percent = [TimeSeries.from_csv(
+        file_path, label=construct_label(file_path)) for file_path in file_paths_thruster_load]
+
+    ts_thrusters_percent = filter_date_time(ts_thrusters_percent, route)
+
+    ts_thrusters_power = sum([ts.transform(transform.thruster_load, "W") for ts in ts_thrusters_percent])
+
+    new_values = []
+    efficiency_switchboard = 0.99
+    efficiency_frequency_converter = 0.97
+    efficiency_generator = 0.96
+    for thrust in ts_thrusters_power.values:
+        new_values.append(thrust / (efficiency_frequency_converter * efficiency_switchboard * efficiency_generator))
+
+    engine_power = TimeSeries(ts_thrusters_power.time_stamps, new_values, "theoretical thermal efficiency", "")
+
+    engine_load = engine_power.transform(transform.engine_power_to_total_load, "%")
+    engine_efficiency = engine_load.transform(transform.engine_efficiency_emperical, "%")
+    engine_efficiency = engine_efficiency.transform(transform.from_percent_to_fraction, "")
+
+    time_diffs = ts_thrusters_power.get_time_diff()
+
+    thruster_time_diffs = [thruster.get_time_diff() for thruster in ts_thrusters_percent][0]
+    electrical_eff = 0.922
+
+    time_stamps = ts_thrusters_power.time_stamps
+    ts_thrusters_power.label = "Thrusters power"
+
+    engines_power_values = []
+    efficiency_switchboard = 0.99
+    efficiency_frequency_converter = 0.97
+    efficiency_generator = 0.96
+
+    for value in ts_thrusters_power.values:
+        engines_power_values.append(value / (efficiency_frequency_converter *
+                                             efficiency_switchboard * efficiency_generator))
+
+    ts_engines_power = TimeSeries(
+        time_stamps, engines_power_values, "Theoretical engine load", "W")
+    ts_engines_load = ts_engines_power.transform(transform.engine_power_to_total_load, "%")
+    ts_engines_efficiency = ts_engines_load.transform(transform.engine_efficiency_emperical, "")
+    ts_engines_efficiency.label = "eninges efficiency"
+
+    diesel_heating_value = 45.4 * 10**6
+
+    # need float conversion here because ints cannot hold this large value and no warnings are thrown by python interpreter.
+    energy_usage = [float(10**(-9)) * float(diff) * float(thrust)/(float(electrical_eff) * float(diesel_heating_value) * float(efficiency))
+                    for diff, thrust, efficiency in zip(time_diffs, ts_thrusters_power.values, engine_efficiency.values)]
+    energy_usage_cumulative = list(accumulate(energy_usage))
+
+    fuel_usage = TimeSeries(ts_thrusters_power.time_stamps[:-1], energy_usage_cumulative, "FUCK", "kg")
+
+    ts_consumed_fuel = TimeSeries(
+        time_stamps,
+        [value / diesel_heating_value for value in ts_engines_power.to_cumulative_values()], "Consumed fuel", "kg")
+    unit = ts_consumed_fuel.unit
+
+    if unit != "%":
+        ax.ticklabel_format(axis='y', style='sci', scilimits=(1, 0))
+
+    ax.tick_params(axis='x', rotation=45)
+    ax.locator_params(axis='y', nbins=20)
+    ax.set_ylabel(unit)
+    ax.set_xlabel("Time")
+    ax.set_title(title + " " + route[0])
+    ax.grid(True)
+
+    # ts_consumed_fuel.plot(ax)
+    fuel_usage.plot(ax)
+
+    ax.legend()
+    figure.tight_layout()
+    try:
+        os.mkdir(f"plots/{route[0]}/")
+    except FileExistsError:
+        pass
+    figure.savefig(f"plots/{route[0]}/{title}{extension}")
+    figure.clf()
+    plt.close()
+
+
+def theoretical_engine_thermal_efficiency(title, route, file_paths):
+    file_paths_thruster_load = [file_path for file_path in file_paths if f.is_thruster_load(file_path)]
+
+    # this value is in percent
+    ts_thrusters = [TimeSeries.from_csv(
+        file_path, label=construct_label(file_path)) for file_path in file_paths_thruster_load]
+
+    date_time_start = route[1]
+    date_time_end = route[2]
+
+    if date_time_start is not None and date_time_end is not None:
+        ts_thrusters = [ts.filter_date(date_time_start, date_time_end) for ts in ts_thrusters]
+
+    ts = sum([ts.transform(transform.thruster_load, "W") for ts in ts_thrusters])
+
+    new_values = []
+    efficiency_switchboard = 0.99
+    efficiency_frequency_converter = 0.97
+    efficiency_generator = 0.96
+    for value in ts.values:
+        new_values.append(value / (efficiency_frequency_converter * efficiency_switchboard * efficiency_generator))
+
+    ts.values = new_values
+
+    ts = ts.transform(transform.engine_power_to_total_load, "%")
+    ts = ts.transform(transform.engine_efficiency_emperical, "%")
+
+    ts.label = "Theoretical thermal efficiency engines"
+    ts.unit = "W"
+
+    unit = ts.unit
+
+    figure, ax = plt.subplots(figsize=(12, 6), dpi=300)
+
+    if unit != "%":
+        ax.ticklabel_format(axis='y', style='sci', scilimits=(1, 0))
+
+    ax.tick_params(axis='x', rotation=45)
+    ax.locator_params(axis='y', nbins=20)
+    ax.set_ylabel(unit)
+    ax.set_xlabel("Time")
+    ax.set_title(title + " " + route[0])
+    ax.grid(True)
+
+    ts.plot(ax)
+
+    ax.legend()
+    figure.tight_layout()
+    try:
+        os.mkdir(f"plots/{route[0]}/")
+    except FileExistsError:
+        pass
+    figure.savefig(f"plots/{route[0]}/{title}{extension}")
+    figure.clf()
+    plt.close()
+
+
 def read_and_plot(title, file_paths, filter, route, sum_plots=False, new_unit: str = None, transformer=None):
     filtered_file_paths = [file_path for file_path in file_paths if filter(file_path)]
 
@@ -167,30 +322,38 @@ def read_and_plot(title, file_paths, filter, route, sum_plots=False, new_unit: s
     plt.close()
 
 
-def efficiency_engine_to_thruster(title, route, file_paths):
+def power_efficiency_engine_to_thruster_emperical(title, route, file_paths):
     figure, ax = plt.subplots(figsize=(12, 6), dpi=300)
-    ax.ticklabel_format(axis='y', style='sci', scilimits=(1, 0))
 
     time_series_engine_load_ind = [TimeSeries.from_csv(file_path, construct_label(
         file_path))for file_path in file_paths if f.is_engine_load(file_path)]
-    time_series_thruster_load_ind = [TimeSeries.from_csv(file_path, construct_label(
-        file_path)) for file_path in file_paths if f.is_thruster_load(file_path)]
 
-    time_series_engine_load_ind = [ts.transform(transform.engine_load, "W") for ts in time_series_engine_load_ind]
-    time_series_thruster_load_ind = [ts.transform(transform.thruster_load, "W") for ts in time_series_thruster_load_ind]
-
-    time_series_engine_load_total = sum(time_series_engine_load_ind)
-    time_series_thruster_load_total = sum(time_series_thruster_load_ind)
-    time_series_load_efficiency = time_series_thruster_load_total / time_series_engine_load_total
-    energy_density_diesel = 45.4e6
-    time_series_load_efficiency = time_series_load_efficiency * 1 / (energy_density_diesel)
+    number_of_engines = len(time_series_engine_load_ind)
 
     date_time_start = route[1]
     date_time_end = route[2]
     if date_time_start is not None and date_time_end is not None:
-        time_series_load_efficiency = time_series_load_efficiency.filter_date(date_time_start, date_time_end)
+        time_series_engine_load_ind = [ts.filter_date(date_time_start, date_time_end)
+                                       for ts in time_series_engine_load_ind]
 
-    unit = time_series_load_efficiency.unit
+    time_series_engine_load_total = sum(time_series_engine_load_ind)
+
+    def to_percent_load(total_engine_load):
+        max_engine_power = 450
+        max_total_engine_power = number_of_engines * max_engine_power
+        result = (total_engine_load / max_total_engine_power) * 100
+        return result
+
+    time_series_engine_load_total = time_series_engine_load_total.transform(to_percent_load, "%")
+    time_series_engine_load_total = time_series_engine_load_total.transform(
+        transform.engine_power_efficiency_emperical_to_thruster, "%")
+
+    time_series_engine_load_total.label = "total power efficiency from engines to thrusters"
+
+    average = sum(time_series_engine_load_total.values) / len(time_series_engine_load_total.values)
+    print(f"{route[0]} average power efficiency from engine to thruster {average}")
+
+    unit = time_series_engine_load_total.unit
 
     ax.tick_params(axis='x', rotation=45)
     ax.locator_params(axis='y', nbins=20)
@@ -200,13 +363,7 @@ def efficiency_engine_to_thruster(title, route, file_paths):
     ax.set_title(title + " " + route[0])
     ax.grid(True)
 
-    # for ts in time_series_engine_load_ind:
-    #     ts.plot(ax, ts.label)
-    #
-    # for ts in time_series_thruster_load_ind:
-    #     ts.plot(ax, ts.label)
-
-    time_series_load_efficiency.plot(ax, f"{title.lower()} total")
+    time_series_engine_load_total.plot(ax, f"{title.lower()} total")
 
     ax.legend()
     figure.tight_layout()
@@ -282,15 +439,15 @@ def main():
 
     for route in routes.routes:
         single_plot_args = [
-            ("Thruster load rpm", f.is_thruster_rpm),
-            ("Thruster load percent", f.is_thruster_load),
+            # ("Thruster load rpm", f.is_thruster_rpm),
+            # ("Thruster load percent", f.is_thruster_load),
 
-            ("Engine speed", f.is_engine_speed),
-            ("Engine boost pressure", f.is_engine_boost_pressure),
-            ("Engine coolant temperature", f.is_engine_coolant_temperature),
-            ("Engine exhaust temperature 1", f.is_engine_exhaust_temperature1),
-            ("Engine exhaust temperature 2", f.is_engine_exhaust_temperature2),
-            ("Engine fuel consumption", f.is_engine_fuel_consumption),
+            # ("Engine speed", f.is_engine_speed),
+            # ("Engine boost pressure", f.is_engine_boost_pressure),
+            # ("Engine coolant temperature", f.is_engine_coolant_temperature),
+            # ("Engine exhaust temperature 1", f.is_engine_exhaust_temperature1),
+            # ("Engine exhaust temperature 2", f.is_engine_exhaust_temperature2),
+            # ("Engine fuel consumption", f.is_engine_fuel_consumption),
             # ("", ),
         ]
 
@@ -308,11 +465,11 @@ def main():
         sum_plot_args = [
             ("Thruster load watt", f.is_thruster_load, "W", transform.thruster_load),
 
-            ("Engine fuel consumption", f.is_engine_fuel_consumption, None, None),
-            ("Engine fuel consumption kg_m³", f.is_engine_fuel_consumption,
-             "kg/m³", transform.engine_fuel_consumption_liter_per_h_to_kg_per_h),
-            ("Engine load", f.is_engine_load, None, None),
-            ("Engine load watt", f.is_engine_load, "W", transform.engine_load),
+            # ("Engine fuel flow rate", f.is_engine_fuel_consumption, None, None),
+            # ("Engine fuel flow rate kg_m³", f.is_engine_fuel_consumption,
+            # "kg/m³", transform.engine_fuel_consumption_liter_per_h_to_kg_per_h),
+            # ("Engine load", f.is_engine_load, None, None),
+            # ("Engine load watt", f.is_engine_load, "W", transform.engine_load),
             # ("", ),
         ]
         for title, filter, new_unit, transformer in sum_plot_args:
@@ -335,9 +492,11 @@ def main():
             new_unit="m/s",
             transformer=transform.km_h_to_m_s,
         )
-        engine_load_minus_thruster_load("difference engine and thruster load", route, file_paths)
-        # efficiency_engine_to_thruster("power efficiency from engine to thruster", route, file_paths)
-        engine_thermal_efficiency("Engine thermal efficiency", file_paths, route)
+        # engine_load_minus_thruster_load("difference engine and thruster load", route, file_paths)
+        power_efficiency_engine_to_thruster_emperical("power efficiency from engines to thrusters", route, file_paths)
+        theoretical_engine_thermal_efficiency("Theoretical engine thermal efficiency", route, file_paths)
+        # total_power_engines("Theoretical fuel consumption", route, file_paths)
+        theoretical_fuel_consumption("Theoretical fuel consumption", route, file_paths)
 
 
 if __name__ == "__main__":

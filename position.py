@@ -106,7 +106,7 @@ def gunnerus_munkholmen_trip(other_positions):
 
 def shared(file_paths, plot_title, other_positions):
     projection = ccrs.PlateCarree()
-    fig, ax = plt.subplots(figsize=(20, 20), subplot_kw={'projection': projection})
+    fig, ax = plt.subplots(figsize=(12, 6), subplot_kw={'projection': projection})
 
     for lat, long, title, in other_positions:
         ax.plot(long, lat, marker="o", color="black", markersize=5, transform=projection)
