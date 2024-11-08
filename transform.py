@@ -1,9 +1,16 @@
+DENCITY_DIESEL = 820
+
+
 def transform_value(time_series, transformer):
     new_time_series = {}
     for label, (time, values) in time_series.items():
         new_time_series[label] = (time, [transformer(value) for value in values])
 
     return new_time_series
+
+
+def engine_fuel_flow_to_kg_per_h(fuel_flow_rate):
+    return fuel_flow_rate * DENCITY_DIESEL
 
 
 def specific_fuel_consumption(fuel_mass_flow, power):
@@ -38,7 +45,7 @@ def km_h_to_m_s(vessel_sog):
     return vessel_sog * 60 / 1000
 
 
-# input: 0-100 
+# input: 0-100
 # output: 0-100
 def engine_efficiency_emperical(engine_power_percent):
     return -0.0024 * engine_power_percent**2 + 0.402 * engine_power_percent + 27.4382
@@ -53,7 +60,6 @@ def engine_power_efficiency_emperical_to_thruster(engine_efficiency):
 
 
 def engine_fuel_consumption_liter_per_h_to_kg_per_h(fuel_flow):
-    DENCITY_DIESEL = 820
     LITER_TO_M3_PER_H = 0.001
     return fuel_flow * LITER_TO_M3_PER_H * DENCITY_DIESEL
 

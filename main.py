@@ -220,7 +220,7 @@ def theoretical_engine_thermal_efficiency(title, route, file_paths):
     ts_engines_power = ts_engines_power.transform(transform.engine_power_to_total_load, "%")
     ts_engines_power = ts_engines_power.transform(transform.engine_efficiency_emperical, "%")
 
-    ts_engines_power.label = "Theoretical thermal efficiency engines"
+    ts_engines_power.label = "Theoretical power efficiency engines"
     ts_engines_power.unit = "%"
 
     figure, ax = get_new_plot()
@@ -281,6 +281,34 @@ def power_efficiency_engine_to_thruster_emperical(title, route, file_paths):
 
     figure, ax = get_new_plot()
     time_series_engine_load_total.plot(ax, title, route)
+    save_plot(figure, title, route)
+    plt.close()
+
+
+def cumulative_fuel_consumption(title, route, file_paths):
+    file_paths_fuel_consumption = filter_array(file_paths, f.is_engine_fuel_consumption)
+    ts_fuel_consumption_ind = [TimeSeries.from_csv(file_path, construct_label(file_path))
+                               for file_path in file_paths_fuel_consumption]
+
+    ts_fuel_consumption_ind = [filter_date_time(ts, route) for ts in ts_fuel_consumption_ind]
+
+    ts_fuel_consumption = sum(ts_fuel_consumption_ind)
+    ts_fuel_consumption.label = "total fuel consumption"
+    time_stamps = ts_fuel_consumption.time_stamps
+
+    fuel_density_diesel = 820
+
+    def to_kg_s(diff, value):
+        return float(0.001/3600) * float(value) * float(fuel_density_diesel) * float(diff) * float(10**(-9))
+
+    fuel_rates = [to_kg_s(diff, value) for diff, value
+                  in zip(ts_fuel_consumption.get_time_diff(), ts_fuel_consumption.values)]
+
+    ts_fuel_consumption_cumulative = TimeSeries(
+        time_stamps[:-1], list(accumulate(fuel_rates)), "Cumulative fuel consumption", "kg")
+
+    figure, ax = get_new_plot()
+    ts_fuel_consumption_cumulative.plot(ax, title, route)
     save_plot(figure, title, route)
     plt.close()
 
@@ -357,7 +385,9 @@ def main():
             ("Thruster power", f.is_thruster_load, "W", transform.thruster_load),
 
             ("Engine fuel flow rate", f.is_engine_fuel_consumption, None, None),
-            ("Engine fuel flow rate kg_m³", f.is_engine_fuel_consumption,
+            ("Engine fuel flow rate kg per h", f.is_engine_fuel_consumption,
+             "kg/h", transform.engine_fuel_consumption_liter_per_h_to_kg_per_h),
+            ("Engine fuel flow rate kg per m³", f.is_engine_fuel_consumption,
              "kg/m³", transform.engine_fuel_consumption_liter_per_h_to_kg_per_h),
             ("Engine power kilowatt", f.is_engine_load, None, None),
             ("Engine power", f.is_engine_load, "W", transform.engine_load),
@@ -388,6 +418,7 @@ def main():
         theoretical_engine_thermal_efficiency("Theoretical engine thermal efficiency", route, file_paths)
         total_power_engines("Theoretical fuel consumption", route, file_paths)
         theoretical_fuel_consumption("Theoretical fuel consumption", route, file_paths)
+        cumulative_fuel_consumption("Cumulative fuel consumption", route, file_paths)
 
 
 if __name__ == "__main__":
