@@ -97,9 +97,18 @@ class TimeSeries:
             transformed_values = [transformer(value, other) for value in self.values]
         return TimeSeries(self.time_stamps, transformed_values, self.label, new_unit)
 
-    def plot(self, axes: plt.Axes, label: str = None) -> None:
+    def plot(self, ax: plt.Axes, title, route, label: str = None) -> None:
+        if self.unit != "%":
+            ax.ticklabel_format(axis='y', style='sci', scilimits=(1, 0))
+        ax.tick_params(axis='x', rotation=45)
+        ax.locator_params(axis='y', nbins=20)
+        ax.set_ylabel(self.unit)
+        ax.set_xlabel("Time")
+        ax.set_title(title + " " + route[0])
+        ax.grid(True)
         label = label or self.label
-        axes.plot(self.time_stamps, self.values, label=label)
+        ax.plot(self.time_stamps, self.values, label=label)
+        ax.legend()
 
     def filter_date(self, date_time_start: datetime, date_time_end: datetime) -> Self:
         with warnings.catch_warnings():
