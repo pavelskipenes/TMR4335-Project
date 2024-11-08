@@ -9,6 +9,18 @@ def transform_value(time_series, transformer):
     return new_time_series
 
 
+def to_thruster_power_kw(value):
+    return value * 5
+
+
+def to_kilo(value):
+    return value / 1000
+
+
+def engine_fuel_consumption_liter_per_h_to_kg_per_s(fuel_flow_rate):
+    return fuel_flow_rate * 0.001/3600
+
+
 def engine_fuel_flow_to_kg_per_h(fuel_flow_rate):
     return fuel_flow_rate * DENCITY_DIESEL
 

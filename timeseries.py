@@ -35,8 +35,8 @@ class TimeSeries:
         for i, time_stamp in enumerate(self.time_stamps[:-1]):
             ret.append(self.time_stamps[i+1] - self.time_stamps[i])
         return ret
-            
-        #return [time_stamp[i+1] - time_stamp[i] for i, time_stamp in enumerate(self.time_stamps[:-1])]
+
+        # return [time_stamp[i+1] - time_stamp[i] for i, time_stamp in enumerate(self.time_stamps[:-1])]
 
     def interpolate(self, other: Self) -> None:
         all_times = np.unique(np.concatenate((self.time_stamps, other.time_stamps)))
@@ -98,13 +98,13 @@ class TimeSeries:
         return TimeSeries(self.time_stamps, transformed_values, self.label, new_unit)
 
     def plot(self, ax: plt.Axes, title, route, label: str = None) -> None:
-        if self.unit != "%":
+        if self.unit not in ["%", "kW", "kg"]:
             ax.ticklabel_format(axis='y', style='sci', scilimits=(1, 0))
         ax.tick_params(axis='x', rotation=45)
         ax.locator_params(axis='y', nbins=20)
         ax.set_ylabel(self.unit)
         ax.set_xlabel("Time")
-        ax.set_title(title + " " + route[0])
+        ax.set_title(title + " route: " + route[0])
         ax.grid(True)
         label = label or self.label
         ax.plot(self.time_stamps, self.values, label=label)
@@ -128,7 +128,6 @@ class TimeSeries:
         for value in self.values[from_num_sample:to_num_sample]:
             acc += value * sample_time
         return acc
-
 
     def to_cumulative_values(self):
         return list(accumulate(self.values))

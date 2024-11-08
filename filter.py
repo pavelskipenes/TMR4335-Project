@@ -2,7 +2,13 @@ def is_engine2(file_path: str) -> bool:
     return "Engine2" in str(file_path)
 
 
+def get_engine_id(file_path):
+    "data/gunnerus/RVG_mqtt/Engine1"
+    return int(str(file_path)[29])
+
 # exclude plotting engine 2 which was not being used
+
+
 def is_engine(file_path: str) -> bool:
     return "Engine" in str(file_path) and not is_engine2(file_path)
 
